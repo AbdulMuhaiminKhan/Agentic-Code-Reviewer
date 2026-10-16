@@ -1,0 +1,17 @@
+[project]
+name = "agentic-code-reviewer"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+extend-exclude = ["docs", "data", "examples/demo-repo"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S603", "S607", "S101", "E501"]   # git subprocesses are intentional; asserts OK in tests; long prompt strings OK
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

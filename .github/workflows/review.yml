@@ -1,0 +1,30 @@
+name: Agentic code review
+# Runs on a SELF-HOSTED runner (your own laptop with Ollama), so no hosted LLM API
+# and no hosted CI plan is involved. Setup: repo Settings > Actions > Runners >
+# New self-hosted runner, then keep `ollama serve` running on that machine.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write   # lets GITHUB_TOKEN post the review comment
+
+jobs:
+  review:
+    # Never run untrusted fork PRs on your own machine.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install
+        run: python -m pip install -r requirements.txt
+      - name: Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACR_PROVIDER: ollama
+          ACR_MODEL: qwen2.5-coder:7b
+        run: python -m acr.cli --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }} --local-repo . --ref ${{ github.event.pull_request.head.sha }} --post

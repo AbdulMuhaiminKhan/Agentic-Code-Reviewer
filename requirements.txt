@@ -1,0 +1,8 @@
+# Runtime: everything runs locally against Ollama. No hosted LLM API is required.
+langgraph>=1.0
+langchain>=1.0            # init_chat_model (provider switching)
+langchain-ollama>=1.0     # local models
+pydantic>=2
+unidiff>=0.7
+requests>=2.31
+python-dotenv>=1.0

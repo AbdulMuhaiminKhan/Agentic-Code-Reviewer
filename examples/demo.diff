@@ -1,0 +1,51 @@
+diff --git a/app/db.py b/app/db.py
+index c39d093..81be6df 100644
+--- a/app/db.py
++++ b/app/db.py
+@@ -8,3 +8,9 @@ def connect(path: str) -> sqlite3.Connection:
+ def find_user(conn: sqlite3.Connection, user_id: int):
+     cur = conn.execute("SELECT id, email FROM users WHERE id = ?", (user_id,))
+     return cur.fetchone()
++
++
++def find_user_by_email(conn: sqlite3.Connection, email: str):
++    """Look up a user by the email address typed into the login form."""
++    query = f"SELECT id, email FROM users WHERE email = '{email}'"
++    return conn.execute(query).fetchone()
+diff --git a/app/pricing.py b/app/pricing.py
+index d975096..9092702 100644
+--- a/app/pricing.py
++++ b/app/pricing.py
+@@ -1,2 +1,13 @@
+ def subtotal(items: list[dict]) -> float:
++    """Sum of price * quantity over all line items."""
+     return sum(i["price"] * i["qty"] for i in items)
++
++
++def apply_coupon(total: float, code: str, coupons: dict[str, float]) -> float:
++    """Apply a percentage coupon. Unknown codes leave the total unchanged."""
++    pct = coupons.get(code.strip().upper())
++    if pct is None:
++        return total
++    if not 0 < pct <= 100:
++        raise ValueError(f"invalid coupon percentage: {pct}")
++    return round(total * (1 - pct / 100), 2)
+diff --git a/app/settings.py b/app/settings.py
+index 016aad8..c8736d8 100644
+--- a/app/settings.py
++++ b/app/settings.py
+@@ -1,3 +1,14 @@
+ import json
+ 
+ DEFAULTS = {"currency": "USD", "tax_rate": 0.2}
++
++
++def load_settings(path: str) -> dict:
++    """Load shop settings from a JSON file, falling back to defaults."""
++    try:
++        with open(path) as fh:
++            data = json.load(fh)
++        return {**DEFAULTS, **data}
++    except Exception:
++        pass
++    return {}

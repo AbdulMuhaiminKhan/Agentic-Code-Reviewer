@@ -1,0 +1,128 @@
+start 19:37:06 ACR_NUM_CTX=8192
+--- 19:37:06
+qwen2.5-coder:7b    dae161e27b0e    5.5 GB    100% GPU     16384      llamacpp    4 minutes from now    
+RAM free 0.4 GB of 15.3 GB; pagefile in use 5.2 GB
+--- 19:37:41
+RAM free 1.7 GB of 15.3 GB; pagefile in use 2.9 GB
+--- 19:38:14
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 1.2 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:38:48
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 1.0 GB of 15.3 GB; pagefile in use 2.2 GB
+--- 19:39:22
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 1.0 GB of 15.3 GB; pagefile in use 2.1 GB
+--- 19:39:56
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 1.1 GB of 15.3 GB; pagefile in use 2.1 GB
+--- 19:40:30
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 1.1 GB of 15.3 GB; pagefile in use 2.1 GB
+--- 19:41:03
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    3 minutes from now    
+RAM free 1.0 GB of 15.3 GB; pagefile in use 2.0 GB
+--- 19:41:37
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.9 GB of 15.3 GB; pagefile in use 2.2 GB
+--- 19:42:11
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.6 GB of 15.3 GB; pagefile in use 2.1 GB
+--- 19:42:45
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.7 GB of 15.3 GB; pagefile in use 2.1 GB
+--- 19:43:18
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.8 GB of 15.3 GB; pagefile in use 2.1 GB
+--- 19:43:53
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.4 GB of 15.3 GB; pagefile in use 2.1 GB
+--- 19:44:30
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.5 GB of 15.3 GB; pagefile in use 2.0 GB
+--- 19:45:04
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.4 GB of 15.3 GB; pagefile in use 2.1 GB
+--- 19:45:39
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.5 GB of 15.3 GB; pagefile in use 2.2 GB
+--- 19:46:13
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.3 GB of 15.3 GB; pagefile in use 2.4 GB
+--- 19:46:46
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.3 GB of 15.3 GB; pagefile in use 2.4 GB
+--- 19:47:21
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.2 GB of 15.3 GB; pagefile in use 2.4 GB
+--- 19:47:54
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.9 GB of 15.3 GB; pagefile in use 3.1 GB
+--- 19:48:29
+qwen2.5-coder:7b    dae161e27b0e    5.0 GB    100% GPU     8192       llamacpp    4 minutes from now    
+RAM free 5.8 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:49:01
+RAM free 2.3 GB of 15.3 GB; pagefile in use 2.5 GB
+--- 19:49:34
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 1.5 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:50:07
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 1.5 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:50:40
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 1.2 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:51:14
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 1.3 GB of 15.3 GB; pagefile in use 2.7 GB
+--- 19:51:48
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.8 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:52:22
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    3 minutes from now    
+RAM free 0.9 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:52:56
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.4 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:53:29
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    3 minutes from now    
+RAM free 0.4 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:54:02
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.3 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:54:37
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.7 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:55:10
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.4 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:55:45
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    3 minutes from now    
+RAM free 0.4 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:56:19
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    3 minutes from now    
+RAM free 0.3 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:56:52
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    2 minutes from now    
+RAM free 0.2 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:57:27
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.4 GB of 15.3 GB; pagefile in use 2.6 GB
+--- 19:58:01
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.6 GB of 15.3 GB; pagefile in use 2.7 GB
+--- 19:58:35
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.6 GB of 15.3 GB; pagefile in use 3.4 GB
+--- 19:59:07
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.2 GB of 15.3 GB; pagefile in use 3.4 GB
+--- 19:59:40
+qwen2.5-coder:14b    9ec8897f747e    10 GB    43%/57% CPU/GPU    8192       llamacpp    4 minutes from now    
+RAM free 0.7 GB of 15.3 GB; pagefile in use 3.9 GB
+--- 20:00:15
+qwen2.5-coder:7b    dae161e27b0e    5.0 GB    100% GPU     8192       llamacpp    4 minutes from now    
+RAM free 6.4 GB of 15.3 GB; pagefile in use 3.4 GB
+[1/2] GHSA-9xg7-gg9m-rmq9 strict=False loose=False findings=3
+--- 20:00:47
+RAM free 2.7 GB of 15.3 GB; pagefile in use 3.3 GB
