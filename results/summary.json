@@ -1,0 +1,30 @@
+{
+  "title": "qwen2.5-coder:7b on real CVEs it had never been tuned on",
+  "subtitle": "Human-labelled. Blue: vulnerable code caught (higher is better). Orange: patched code still flagged (lower is better).",
+  "rows": [
+    {
+      "label": "Django (40) \u00b7 verifier on",
+      "n": 40,
+      "caught": 1,
+      "false_alarms": 2
+    },
+    {
+      "label": "Django (40) \u00b7 verifier off",
+      "n": 40,
+      "caught": 2,
+      "false_alarms": 8
+    },
+    {
+      "label": "Apps: pyload + FAB (39) \u00b7 verifier on",
+      "n": 39,
+      "caught": 4,
+      "false_alarms": 2
+    },
+    {
+      "label": "Apps: pyload + FAB (39) \u00b7 verifier off",
+      "n": 39,
+      "caught": 5,
+      "false_alarms": 5
+    }
+  ]
+}

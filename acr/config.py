@@ -1,15 +1,29 @@
-"""Model factory. Local Ollama by default; optional free-tier API fallback."""
+"""Model factory. Local Ollama by default; an optional fallback provider can be configured."""
 
+import io
 import os
+import sys
+from typing import overload
 
+import requests
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 
 load_dotenv()
 
 
+@overload
+def env(name: str) -> str | None: ...
+@overload
+def env(name: str, default: str) -> str: ...
 def env(name: str, default: str | None = None) -> str | None:
     return os.getenv(name, default)
+
+
+def utf8_stdout() -> None:
+    """Windows consoles default to cp1252, which cannot print the emoji in the review."""
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(encoding="utf-8")
 
 
 def _make(provider: str, model: str):
@@ -44,3 +58,21 @@ def structured_llm(schema, role: str = "ACR"):
 
 def model_label() -> str:
     return f"{env('ACR_PROVIDER', 'ollama')}:{env('ACR_MODEL', 'qwen2.5-coder:7b')}"
+
+
+def check_model() -> str | None:
+    """Fail fast with a clear message instead of a review where every agent call silently failed.
+    Returns a problem description, or None when the configured local model is ready."""
+    if env("ACR_PROVIDER", "ollama") != "ollama":
+        return None
+    url = env("ACR_OLLAMA_URL", "http://localhost:11434")
+    model = env("ACR_MODEL", "qwen2.5-coder:7b")
+    try:
+        r = requests.get(f"{url}/api/tags", timeout=5)
+        r.raise_for_status()
+        names = {m.get("name") for m in r.json().get("models", [])}
+    except (requests.RequestException, ValueError) as e:
+        return f"Ollama is not reachable at {url} ({type(e).__name__}). Start the Ollama app or run `ollama serve`."
+    if model not in names and f"{model}:latest" not in names:
+        return f"Model {model} is not pulled. Run: ollama pull {model}"
+    return None

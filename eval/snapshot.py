@@ -27,8 +27,9 @@ def enclosing_spans(source: str, ranges: list[tuple[int, int]], max_len: int = 2
         best = None
         for fn in funcs:
             start = min([fn.lineno] + [d.lineno for d in fn.decorator_list])
-            if start <= a and fn.end_lineno >= b and (best is None or fn.end_lineno - start < best[1] - best[0]):
-                best = (start, fn.end_lineno)
+            end = fn.end_lineno or fn.lineno
+            if start <= a and end >= b and (best is None or end - start < best[1] - best[0]):
+                best = (start, end)
         s, e = best or (a - pad, b + pad)
         if e - s + 1 > max_len:  # huge function: window around the change
             s, e = a - max_len // 2, b + max_len // 2

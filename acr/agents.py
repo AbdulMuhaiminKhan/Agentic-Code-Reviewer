@@ -132,7 +132,11 @@ def test_context(fd: FileDiff, repo: RepoContext | None, diff_tests: str) -> str
     return extra
 
 
-def run_specialist(kind: str, fd: FileDiff, repo: RepoContext | None, diff_tests: str = "") -> list[Finding]:
+def run_specialist(
+    kind: str, fd: FileDiff, repo: RepoContext | None, diff_tests: str = "", errors: list[str] | None = None
+) -> list[Finding]:
+    """Review one file for one concern. A failed model call returns [] and is recorded in `errors`,
+    so the review can say it is incomplete instead of looking like a clean approval."""
     llm = structured_llm(SpecialistOutput)
     extra = test_context(fd, repo, diff_tests) if kind in ("test_coverage", "all") else ""
     if kind == "security" and repo and os.getenv("ACR_SECURITY_PROMPT", "v2") != "v1":
@@ -145,6 +149,8 @@ def run_specialist(kind: str, fd: FileDiff, repo: RepoContext | None, diff_tests
             out = llm.invoke([("system", _system(kind)), ("human", _human(fd, extra))])
         except Exception as e:  # malformed JSON after retries, provider down, etc.
             log.warning("%s agent failed on %s: %s", kind, fd.path, e)
+            if errors is not None:
+                errors.append(f"{kind} on {fd.path}: {type(e).__name__}")
             return []
         if out is None:
             return []
@@ -154,6 +160,8 @@ def run_specialist(kind: str, fd: FileDiff, repo: RepoContext | None, diff_tests
             continue
         break
 
+    if out is None:
+        return []
     log.info("%s agent on %s returned %d finding(s)", kind, fd.path, len(out.findings))
     findings = []
     for raw in out.findings:

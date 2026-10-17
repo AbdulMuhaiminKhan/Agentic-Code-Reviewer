@@ -6,3 +6,5 @@ pydantic>=2
 unidiff>=0.7
 requests>=2.31
 python-dotenv>=1.0
+streamlit>=1.40           # local web UI (ui/app.py)
+pandas>=2                 # tables in the UI

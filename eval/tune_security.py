@@ -13,11 +13,11 @@ Never point this at the test split: tuning on the cases you report would inflate
 import argparse
 import json
 import os
-import sys
 import time
 
 from acr.agents import run_specialist
 from acr.aggregate import aggregate
+from acr.config import utf8_stdout
 from acr.diff_parser import parse_diff
 from acr.tools import RepoContext
 from eval.backtest import near, wilson
@@ -33,7 +33,7 @@ def main():
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--tol", type=int, default=5)
     a = ap.parse_args()
-    sys.stdout.reconfigure(encoding="utf-8")
+    utf8_stdout()  # the output has emoji; Windows consoles default to cp1252
 
     by_id = {c["id"]: c for c in map(json.loads, open(a.cases, encoding="utf-8"))}
     dev = [by_id[i] for i in json.load(open(a.split_file, encoding="utf-8"))["dev"]][: a.n]

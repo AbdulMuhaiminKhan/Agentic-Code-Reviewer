@@ -12,6 +12,15 @@ extend-exclude = ["docs", "data", "examples/demo-repo"]
 select = ["E", "F", "I", "B", "UP", "S"]
 ignore = ["S603", "S607", "S101", "E501"]   # git subprocesses are intentional; asserts OK in tests; long prompt strings OK
 
+[tool.ruff.lint.per-file-ignores]
+"examples/build_demo_prs.py" = ["S608"]   # the planted SQL injection is the point of this file
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.pyright]
+include = ["acr", "eval", "ui", "examples", "tests"]
+typeCheckingMode = "standard"
+# LangGraph state is a partial-update TypedDict (total=False): nodes read keys earlier nodes wrote.
+reportTypedDictNotRequiredAccess = false

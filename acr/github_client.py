@@ -34,13 +34,16 @@ def upsert_pr_comment(repo: str, number: int, body: str) -> str:
     """Post the review, or edit our previous comment so re-runs don't spam the PR."""
     body = f"{COMMENT_MARKER}\n{body}"
     url = f"{API}/repos/{repo}/issues/{number}/comments"
-    r = requests.get(url, headers=_headers(), params={"per_page": 100}, timeout=30)
-    r.raise_for_status()
-    for c in r.json():
-        if COMMENT_MARKER in (c.get("body") or ""):
-            r = requests.patch(c["url"], headers=_headers(), json={"body": body}, timeout=30)
-            r.raise_for_status()
-            return r.json()["html_url"]
+    page_url, params = url, {"per_page": 100}
+    while page_url:  # busy PRs have more than one page of comments
+        r = requests.get(page_url, headers=_headers(), params=params, timeout=30)
+        r.raise_for_status()
+        for c in r.json():
+            if COMMENT_MARKER in (c.get("body") or ""):
+                r = requests.patch(c["url"], headers=_headers(), json={"body": body}, timeout=30)
+                r.raise_for_status()
+                return r.json()["html_url"]
+        page_url, params = r.links.get("next", {}).get("url"), None
     r = requests.post(url, headers=_headers(), json={"body": body}, timeout=30)
     r.raise_for_status()
     return r.json()["html_url"]

@@ -15,12 +15,11 @@ import math
 import os
 import random
 import statistics
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
-from acr.config import model_label
+from acr.config import model_label, utf8_stdout
 from acr.graph import review
 from eval.judge import judge
 from eval.snapshot import build_case_diff
@@ -50,7 +49,16 @@ def score(case: dict, findings, ranges: dict, tol: int, rejected=()) -> dict:
         "n_findings": len(findings),
         "verifier_dropped_hit": any(v.same_issue and near(f, ranges, tol) for f, v in rejected_judged),
         "judgements": [
-            {"file": f.file, "line": f.line, "title": f.title, "same_issue": v.same_issue, "reason": v.reason, "verifier": kept}
+            {
+                "file": f.file,
+                "line": f.line,
+                "title": f.title,
+                "category": f.category,
+                "explanation": f.explanation,
+                "same_issue": v.same_issue,
+                "reason": v.reason,
+                "verifier": kept,
+            }
             for kept, pairs in (("kept", judged), ("rejected", rejected_judged))
             for f, v in pairs
         ],
@@ -75,7 +83,7 @@ def main():
     ap.add_argument("--split", choices=["dev", "test"], help="use a frozen split from --split-file instead of a random sample")
     ap.add_argument("--split-file", default="eval/splits/django.json")
     a = ap.parse_args()
-    sys.stdout.reconfigure(encoding="utf-8")  # the report has emoji; Windows consoles default to cp1252
+    utf8_stdout()  # the output has emoji; Windows consoles default to cp1252
 
     cases = [json.loads(ln) for ln in open(a.cases, encoding="utf-8")]
     if a.split:
@@ -104,9 +112,10 @@ def main():
         row = {"id": case["id"], "cve": case["cve"], "cwes": case["cwes"], "published_at": case["published_at"]}
         versions = ["vulnerable"] if a.mode == "reverse" else ["vulnerable", "fixed"]
         for version in versions:
-            diff, ref, ranges = build_case_diff(a.clone, case, version, a.mode)
+            clone = case.get("clone") or a.clone  # cases built from several repos carry their own clone path
+            diff, ref, ranges = build_case_diff(clone, case, version, a.mode)
             t0 = time.perf_counter()
-            result = review(diff, repo_root=a.clone, repo_ref=ref)  # the reviewer never sees the advisory
+            result = review(diff, repo_root=clone, repo_ref=ref)  # the reviewer never sees the advisory
             latency = time.perf_counter() - t0
             latencies.append(latency)
             row[version] = score(case, result["findings"], ranges, a.tol, result.get("rejected", []))

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from acr import agents, graph
@@ -45,7 +47,8 @@ def test_parse_diff_line_numbers():
 
 def test_ground_snaps_to_real_line_and_rejects_hallucinations():
     [fd] = parse_diff(DIFF)
-    assert ground(_f(line=40), fd).line == 11  # wrong line, right evidence -> snapped
+    grounded = ground(_f(line=40), fd)
+    assert grounded is not None and grounded.line == 11  # wrong line, right evidence -> snapped
     assert ground(_f(evidence="os.system(cmd)"), fd) is None  # evidence not in diff -> dropped
 
 
@@ -107,7 +110,7 @@ def test_verify_node_passes_test_context_only_for_coverage(monkeypatch):
     seen = []
     monkeypatch.setattr(graph, "verify", lambda f, fd, context="": seen.append((f.category, context)) or True)
     [fd] = parse_diff(DIFF)
-    state = {"files": [fd], "findings": [_f(), _f(category="test_coverage")], "stats": {}, "repo_root": None}
+    state: graph.ReviewState = {"files": [fd], "findings": [_f(), _f(category="test_coverage")], "stats": {}, "repo_root": None}
     out = graph.verify_node(state)
     assert len(out["findings"]) == 2
     assert seen[0] == ("security", "")
@@ -141,7 +144,7 @@ def test_cli_rejects_post_without_pr_before_reviewing(monkeypatch, tmp_path):
 def test_verify_node_keeps_rejected_findings_for_the_backtest(monkeypatch):
     monkeypatch.setattr(graph, "verify", lambda f, fd, context="": f.category == "security")
     [fd] = parse_diff(DIFF)
-    state = {"files": [fd], "findings": [_f(), _f(category="error_handling")], "stats": {}, "repo_root": None}
+    state: graph.ReviewState = {"files": [fd], "findings": [_f(), _f(category="error_handling")], "stats": {}, "repo_root": None}
     out = graph.verify_node(state)
     assert [f.category for f in out["findings"]] == ["security"]
     assert [f.category for f in out["rejected"]] == ["error_handling"]
@@ -167,12 +170,14 @@ def test_callers_lists_call_sites_but_not_defs_tests_or_the_file_itself(tmp_path
         tmp_path,
         {
             "lib/sql.py": "def quote_name(n):\n    return n\n\nx = quote_name('a')\n",
-            "lib/lookups.py": "from .sql import quote_name\nsql = quote_name(request_key)\n",
+            "lib/lookups.py": "from .sql import quote_name\n\n\nclass Lookup:\n    def as_sql(self, key):\n        return quote_name(key)\n",
+            "lib/views.py": "def search(request):\n    return Lookup().as_sql(request.GET['k'])\n",
             "tests/test_sql.py": "quote_name('t')\n",
         },
     )
     out = RepoContext(root).callers(["quote_name"], exclude="lib/sql.py")
-    assert "lib/lookups.py:2:sql = quote_name(request_key)" in out
+    assert "lib/lookups.py:6 in as_sql(): return quote_name(key)" in out  # the method, not the class
+    assert "<- as_sql() is called at lib/views.py:2 in search(): return Lookup().as_sql(request.GET['k'])" in out
     assert "tests/" not in out and "lib/sql.py" not in out
     assert RepoContext(root).callers(["nothing_calls_me"]) == "[no callers found outside this file]"
 
@@ -193,3 +198,189 @@ def test_specialist_schema_cannot_be_answered_with_an_empty_object():
     assert schema["properties"]["analysis"]["maxLength"] == 600  # grammar-level cap, see schemas.py
     with pytest.raises(ValueError):
         SpecialistOutput.model_validate({})
+
+
+# --- CLI / integration paths (model and GitHub are stubbed; nothing here talks to a real service) ----------
+
+
+class _FakeResponse:
+    def __init__(self, payload, links=None, status=200):
+        self._payload, self.links, self.status_code = payload, links or {}, status
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(self.status_code)
+
+
+def test_upsert_pr_comment_edits_our_comment_on_a_later_page(monkeypatch):
+    from acr import github_client as gh
+
+    calls = []
+    page1 = _FakeResponse([{"body": "lgtm", "url": "u1"}], links={"next": {"url": "page2"}})
+    page2 = _FakeResponse([{"body": f"{gh.COMMENT_MARKER}\nold review", "url": "u2"}])
+    monkeypatch.setattr(gh.requests, "get", lambda url, **k: calls.append(("get", url)) or (page2 if url == "page2" else page1))
+    monkeypatch.setattr(gh.requests, "patch", lambda url, **k: calls.append(("patch", url)) or _FakeResponse({"html_url": "h"}))
+    monkeypatch.setattr(gh.requests, "post", lambda *a, **k: pytest.fail("must edit, not create a second comment"))
+    assert gh.upsert_pr_comment("me/repo", 3, "new review") == "h"
+    assert calls[-1] == ("patch", "u2")
+
+
+def test_upsert_pr_comment_creates_when_none_exists(monkeypatch):
+    from acr import github_client as gh
+
+    monkeypatch.setattr(gh.requests, "get", lambda *a, **k: _FakeResponse([]))
+    posted = {}
+    monkeypatch.setattr(gh.requests, "post", lambda url, json, **k: posted.update(json) or _FakeResponse({"html_url": "h"}))
+    assert gh.upsert_pr_comment("me/repo", 3, "review") == "h"
+    assert posted["body"].startswith(gh.COMMENT_MARKER)
+
+
+def test_check_model_reports_unreachable_and_missing_model(monkeypatch):
+    from acr import config
+
+    def down(*a, **k):
+        raise config.requests.ConnectionError("refused")
+
+    monkeypatch.setenv("ACR_MODEL", "qwen2.5-coder:7b")
+    monkeypatch.setattr(config.requests, "get", down)
+    assert "not reachable" in (config.check_model() or "")
+    monkeypatch.setattr(config.requests, "get", lambda *a, **k: _FakeResponse({"models": [{"name": "llama3.1:8b"}]}))
+    assert "ollama pull qwen2.5-coder:7b" in (config.check_model() or "")
+    monkeypatch.setattr(config.requests, "get", lambda *a, **k: _FakeResponse({"models": [{"name": "qwen2.5-coder:7b"}]}))
+    assert config.check_model() is None
+
+
+def test_local_diff_reviews_a_branch_against_its_base(tmp_path):
+    import subprocess
+
+    from acr.cli import local_diff
+
+    root = _git_repo(tmp_path, {"app.py": "x = 1\n"})
+    git = ["git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run([*git, "checkout", "-q", "-b", "feature"], check=True)
+    (tmp_path / "app.py").write_text("x = 1\ny = eval(input())\n", encoding="utf-8")
+    subprocess.run([*git, "commit", "-qam", "feature"], check=True)
+    base = subprocess.run(["git", "-C", root, "rev-parse", "HEAD~1"], capture_output=True, text=True).stdout.strip()
+    [fd] = parse_diff(local_diff(root, base, "feature"))
+    assert fd.added_lines == {2: "y = eval(input())"}
+
+
+def _stub_llm_factory(answers):
+    """structured_llm stand-in that answers by schema; an Exception instance is raised instead."""
+
+    def factory(schema, role="ACR"):
+        answer = answers[schema.__name__]
+
+        class _LLM:
+            def invoke(self, messages):
+                if isinstance(answer, Exception):
+                    raise answer
+                return answer
+
+        return _LLM()
+
+    return factory
+
+
+def test_full_graph_end_to_end_with_stubbed_model(monkeypatch):
+    from acr.schemas import Synthesis
+
+    raw = RawFinding(category="security", line=11, severity="high", title="SQL injection via raw query",
+                     evidence="sql = \"SELECT * FROM item WHERE name = '%s'\" % q", explanation="q is user input",
+                     suggestion="use params", confidence=0.9)  # fmt: skip
+    monkeypatch.setattr(agents, "structured_llm", _stub_llm_factory({
+        "SpecialistOutput": SpecialistOutput(analysis="line 11 builds SQL", findings=[raw], need_context=[]),
+        "VerifyVerdict": VerifyVerdict(reason="real", is_real=True),
+        "Synthesis": Synthesis(summary="SQL injection in search.", verdict="request_changes"),
+    }))  # fmt: skip
+    out = graph.review(DIFF)
+    assert out["verdict"] == "request_changes" and out["stats"]["failed_calls"] == 0
+    assert len(out["findings"]) == 1 and out["findings"][0].line == 11  # 3 agents reported it; dedupe kept one
+    assert "app/views.py:11" in out["markdown"]
+
+
+def test_review_is_marked_incomplete_when_agent_calls_fail(monkeypatch):
+    monkeypatch.setattr(agents, "structured_llm", _stub_llm_factory({"SpecialistOutput": ConnectionError("ollama down")}))
+    out = graph.review(DIFF)
+    assert out["stats"]["failed_calls"] == 3
+    assert out["verdict"] == "comment"  # never a clean "approve" when the agents crashed
+    assert "Review incomplete" in out["markdown"]
+
+
+def test_audit_scores_runs_with_human_labels_not_the_judge(tmp_path):
+    import csv
+
+    from eval import audit
+
+    case = {"id": "GHSA-x", "cve": "CVE-1", "vuln_ranges": {"a.py": [[10, 12]]}, "fixed_ranges": {"a.py": [[10, 13]]}}
+    (tmp_path / "cases.jsonl").write_text(json.dumps(case) + "\n", encoding="utf-8")
+    run = tmp_path / "run"
+    run.mkdir()
+
+    def judged(line, title, same):
+        return {"file": "a.py", "line": line, "title": title, "category": "security", "explanation": "x",
+                "same_issue": same, "reason": "r", "verifier": "kept"}  # fmt: skip
+
+    row = {"id": "GHSA-x", "cve": "CVE-1",
+           "vulnerable": {"findings": [], "judgements": [judged(11, "SQLi via key", False)]},  # judge missed it
+           "fixed": {"findings": [], "judgements": [judged(11, "SQLi via key", True)]}}  # judge false alarm  # fmt: skip
+    (run / "GHSA-x.json").write_text(json.dumps(row), encoding="utf-8")
+    labels = tmp_path / "labels.csv"
+    audit.export(str(run), "", str(labels), cases_path=str(tmp_path / "cases.jsonl"))
+    rows = list(csv.DictReader(open(labels, encoding="utf-8")))
+    rows[0]["human"], rows[1]["human"] = "yes", "no"  # human: real catch, patched code is fine
+    with open(labels, "w", encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=audit.FIELDS)
+        w.writeheader()
+        w.writerows(rows)
+    out = audit.score(str(run), str(labels), cases_path=str(tmp_path / "cases.jsonl"))
+    assert (out["strict"], out["false_alarms"], out["discriminating"], out["agree"]) == (1, 0, 1, 0)
+
+
+# --- Streamlit UI (streamlit.testing runs the real app script; the model is stubbed) -----------------------
+
+
+def test_streamlit_app_reviews_a_pasted_diff(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+
+    from acr import config
+    from acr import graph as graph_mod
+    from acr.schemas import Finding
+
+    finding = Finding(category="security", line=11, severity="high", title="SQL injection via raw query",
+                      evidence="sql = ...", explanation="q is user input", suggestion="use params", confidence=0.9,
+                      file="app/views.py", agents=["security"])  # fmt: skip
+    state = {"findings": [finding], "rejected": [], "verdict": "request_changes", "summary": "SQL injection in search.",
+             "markdown": "## review", "stats": {"raw": 3, "dropped_ungrounded": 0, "merged_duplicates": 2,
+                                                "dropped_by_verifier": 0, "failed_calls": 0}}  # fmt: skip
+
+    def fake_events(diff_text, repo_root=None, repo_ref="HEAD"):
+        yield "node", "parse"
+        for _ in range(3):
+            yield "node", "specialist"
+        yield "done", state
+
+    monkeypatch.setattr(config, "check_model", lambda: None)
+    monkeypatch.setattr(graph_mod, "review_events", fake_events)
+    at = AppTest.from_file("../ui/app.py", default_timeout=30).run()
+    assert not at.exception
+    at.radio(key="source").set_value("Paste a diff").run()
+    at.text_area[0].input(DIFF).run()
+    next(b for b in at.button if b.label == "Run review").click().run()
+    assert not at.exception
+    assert any("Changes requested" in s.value for s in at.subheader)
+    assert any("SQL injection" in e.label for e in at.expander)
+
+
+def test_dedupe_merges_other_agents_security_remark_on_the_same_line():
+    sec = _f(line=7, title="Command injection", explanation="shell=True with a user-supplied file name", evidence="x")
+    err = _f(category="error_handling", agents=["error_handling"], line=7, severity="high", evidence="x",
+             title="Potential security risk due to use of shell=True", explanation="subprocess with shell")  # fmt: skip
+    other = _f(category="error_handling", agents=["error_handling"], line=7, severity="medium", evidence="x",
+               title="Unchecked return code", explanation="check=True raises CalledProcessError")  # fmt: skip
+    out = dedupe([sec, err, other])
+    assert [f.title for f in out] == ["Command injection", "Unchecked return code"]
+    assert out[0].agents == ["error_handling", "security"]

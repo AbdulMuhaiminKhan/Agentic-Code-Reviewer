@@ -37,7 +37,14 @@ def _similar(a: Finding, b: Finding) -> bool:
     wa = set(_WORD.findall((a.title + " " + a.explanation).lower()))
     wb = set(_WORD.findall((b.title + " " + b.explanation).lower()))
     jaccard = len(wa & wb) / max(1, len(wa | wb))
-    return a.category == b.category or jaccard >= 0.25
+    if a.category == b.category or jaccard >= 0.25:
+        return True
+    # Another agent straying into security's lane on the very same line ("security risk: shell=True")
+    # next to the security agent's "Command injection" is one issue, even when the wording differs.
+    if a.line == b.line and "security" in (a.category, b.category):
+        other = b if a.category == "security" else a
+        return "secur" in (other.title + " " + other.explanation).lower()
+    return False
 
 
 def dedupe(findings: list[Finding], line_window: int = 2) -> list[Finding]:

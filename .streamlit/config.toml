@@ -1,0 +1,11 @@
+# The UI can read any local git repo you point it at, so it must never listen on the network.
+[server]
+address = "127.0.0.1"
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+# Hides the "Deploy" button: this app is meant to run locally only.
+toolbarMode = "viewer"

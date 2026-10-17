@@ -6,7 +6,7 @@ next to every line is the single cheapest accuracy win in this project.
 
 from dataclasses import dataclass, field
 
-from unidiff import PatchSet
+from unidiff.patch import PatchSet
 
 SKIP_SUFFIXES = (".lock", ".min.js", ".map", ".svg", ".png", ".jpg", ".gif", ".ico", ".po", ".mo", ".pdf")
 REVIEWABLE_SUFFIXES = (".py",)  # extend when you add languages
@@ -44,7 +44,7 @@ def parse_diff(diff_text: str, max_lines_per_file: int = 400) -> list[FileDiff]:
             )
             for line in hunk:
                 text = line.value.rstrip("\n")
-                if line.is_added:
+                if line.is_added and line.target_line_no is not None:
                     fd.added_lines[line.target_line_no] = text
                     out.append(f"{line.target_line_no:>5} + {text}")
                 elif line.is_removed:

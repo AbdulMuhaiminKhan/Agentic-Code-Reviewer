@@ -14,7 +14,7 @@ import re
 import subprocess
 
 import requests
-from unidiff import PatchSet
+from unidiff.patch import PatchSet
 
 from acr.diff_parser import is_test_path
 from acr.github_client import API, _headers
@@ -78,6 +78,8 @@ def main():
                     "summary": adv.get("summary"),
                     "description": (adv.get("description") or "")[:1500],
                     "fix_sha": full,
+                    "repo": a.repo,
+                    "clone": a.clone,  # lets one cases file mix several repositories
                     "files": src,
                     **changed_ranges(a.clone, full, src),
                 }
