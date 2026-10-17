@@ -384,3 +384,21 @@ def test_dedupe_merges_other_agents_security_remark_on_the_same_line():
     out = dedupe([sec, err, other])
     assert [f.title for f in out] == ["Command injection", "Unchecked return code"]
     assert out[0].agents == ["error_handling", "security"]
+
+
+def test_cwe_only_on_security_findings_and_kept_through_dedupe(monkeypatch):
+    raw = RawFinding(category="test_coverage", line=11, severity="medium", title="no test", evidence="sql =",
+                     explanation="x", suggestion="y", confidence=0.9, cwe="CWE-78")  # fmt: skip
+    monkeypatch.setattr(
+        agents,
+        "structured_llm",
+        lambda schema, role="ACR": _StubLLM(SpecialistOutput(analysis="", findings=[raw], need_context=[])),
+    )
+    [fd] = parse_diff(DIFF)
+    [f] = agents.run_specialist("test_coverage", fd, repo=None)
+    assert f.cwe is None
+    sec = _f(cwe=None)
+    twin = _f(category="error_handling", agents=["error_handling"], severity="medium", cwe="CWE-89",
+              title="SQL injection risk", explanation="user input in SQL")  # fmt: skip
+    [merged] = dedupe([sec, twin])
+    assert merged.cwe == "CWE-89"

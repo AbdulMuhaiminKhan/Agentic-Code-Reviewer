@@ -170,6 +170,8 @@ def run_specialist(
             data["category"] = kind  # never trust the model on its own lane
         if data["category"] == "test_coverage" and data["severity"] in ("critical", "high"):
             data["severity"] = "medium"  # the 7B model rated every missing test "high"; a missing test never blocks a merge alone
+        if data["category"] != "security":
+            data["cwe"] = None  # seen: a CWE-78 label on a missing-test finding; CWEs describe vulnerabilities only
         findings.append(Finding(**data, file=fd.path, agents=[kind]))
     return findings
 

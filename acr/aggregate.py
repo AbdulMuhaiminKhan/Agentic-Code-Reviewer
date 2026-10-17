@@ -54,6 +54,7 @@ def dedupe(findings: list[Finding], line_window: int = 2) -> list[Finding]:
         if dup:
             dup.agents = sorted(set(dup.agents + f.agents))
             dup.confidence = max(dup.confidence, f.confidence)
+            dup.cwe = dup.cwe or f.cwe  # keep the label when the merged-away twin had one
         else:
             kept.append(f)
     return sorted(kept, key=lambda x: (-SEVERITY_RANK[x.severity], x.file, x.line))
