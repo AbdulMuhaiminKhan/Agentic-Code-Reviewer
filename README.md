@@ -214,21 +214,21 @@ python -m eval.plot_results                                     # results/summar
 
 ## On real GitHub pull requests (verified)
 
-`python examples/build_demo_prs.py` builds a small Flask shop with four PR branches containing planted bugs, plus one clean refactor as a control. I pushed it to a private GitHub repo, opened the four PRs, and ran
+`python examples/build_demo_prs.py` builds a small Flask shop with four PR branches containing planted bugs, plus one clean refactor as a control. It lives at [acr-demo-shop](https://github.com/AbdulMuhaiminKhan/acr-demo-shop) (intentionally vulnerable, don't deploy it). I opened the four PRs there and ran
 `python -m acr.cli --repo <you>/acr-demo-shop --pr <n> --local-repo ../acr-demo-shop --ref <branch> --post` on each (diff fetched from the GitHub API, review posted as a PR comment, 35-133 s per PR):
 
 | PR | Planted | Review comment |
 |---|---|---|
-| #1 order search | SQL injection, open redirect after login | ✅ SQL injection (high) · ❌ missed the open redirect |
-| #2 invoice download | path traversal, `except Exception: pass` | ✅ both |
-| #3 thumbnails | command injection (`shell=True`), untested helper | ✅ both, plus a fair path-traversal note on the upload name |
-| #4 pricing refactor | nothing (clean, with tests) | ✅ "Looks good" |
+| [#1 order search](https://github.com/AbdulMuhaiminKhan/acr-demo-shop/pull/1) | SQL injection, open redirect after login | ✅ SQL injection (high) · ❌ missed the open redirect |
+| [#2 invoice download](https://github.com/AbdulMuhaiminKhan/acr-demo-shop/pull/2) | path traversal, `except Exception: pass` | ✅ both |
+| [#3 thumbnails](https://github.com/AbdulMuhaiminKhan/acr-demo-shop/pull/3) | command injection (`shell=True`), untested helper | ✅ both, plus a fair path-traversal note on the upload name |
+| [#4 pricing refactor](https://github.com/AbdulMuhaiminKhan/acr-demo-shop/pull/4) | nothing (clean, with tests) | ✅ "Looks good" |
 
 6 of 7 planted bugs caught, and the clean PR approved. Re-running `--post` edits the existing comment instead of adding a new one (checked on PR #4). This demo also exposed a duplicate: the error-handling agent called `shell=True` a security risk on the same line as the security agent's finding. Dedupe now merges that case.
 
-## GitHub Action (self-hosted, not yet verified)
+## GitHub Action (self-hosted, manual)
 
-`.github/workflows/review.yml` runs the reviewer on a **self-hosted runner** (your own machine with Ollama), so no hosted LLM and no paid CI minutes are involved. It only runs for PRs from branches in the same repo, never from forks, because a fork PR would execute untrusted code on your machine. Setup: repo **Settings → Actions → Runners → New self-hosted runner**, keep Ollama running, and make sure `python` and `git` are on the runner's PATH. The workflow itself is **not tested yet** (it needs a self-hosted runner registered on your repo); the `--post` step it runs is verified above.
+`.github/workflows/review.yml` reviews a pull request on a **self-hosted runner** (your own machine with Ollama), so no hosted LLM and no paid CI minutes are involved. It is **manual-only** (Actions → Agentic code review → Run workflow → PR number): with no runner registered, an automatic `pull_request` trigger would leave every PR with a check stuck in "Queued", and GitHub advises against self-hosted runners on public repositories because pull requests could run code on your machine. Use it from a private copy. The workflow itself hasn't been run yet; the `--post` step it calls is verified above.
 
 ## Troubleshooting
 
@@ -253,11 +253,11 @@ eval/           build_dataset, snapshot, judge, backtest (Wilson CIs, --split/--
                 audit (human labels), tune_security (dev-only loop), plot_results, splits/, labels/
 examples/       build_demo.py + demo.diff (planted bugs), trial_14b.sh (speed/RAM trial for bigger models)
 tests/          unit, regression and integration tests (model and GitHub stubbed)
-docs/           implementation-guide.md (the full design write-up), results.svg, UI screenshots
+docs/           design.md (architecture, decisions, evaluation method, lessons), results.svg, UI screenshots
 results/        backtest reports and summary.json
 ```
 
-See [`docs/implementation-guide.md`](docs/implementation-guide.md) for the original design discussion. It also describes optional free-tier hosted API fallbacks; this project doesn't use them (everything runs locally).
+See [`docs/design.md`](docs/design.md) for the architecture, the design decisions and what the measurements changed.
 
 ## License
 

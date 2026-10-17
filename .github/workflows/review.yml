@@ -1,10 +1,19 @@
 name: Agentic code review
-# Runs on a SELF-HOSTED runner (your own laptop with Ollama), so no hosted LLM API
-# and no hosted CI plan is involved. Setup: repo Settings > Actions > Runners >
-# New self-hosted runner, then keep `ollama serve` running on that machine.
+# Reviews a pull request with a local model on a SELF-HOSTED runner (a machine you own, running Ollama),
+# so no hosted LLM API and no paid CI minutes are involved.
+#
+# Manual-only on purpose: with no self-hosted runner registered, a pull_request trigger would leave every
+# PR with a check stuck in "Queued". GitHub also advises against self-hosted runners on PUBLIC repositories,
+# because pull requests can run code on your machine. Use it from a private repository:
+#   1. Settings > Actions > Runners > New self-hosted runner (on the machine with Ollama + the model)
+#   2. Actions > Agentic code review > Run workflow > enter the PR number
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Pull request number to review"
+        required: true
+        type: number
 
 permissions:
   contents: read
@@ -12,19 +21,21 @@ permissions:
 
 jobs:
   review:
-    # Never run untrusted fork PRs on your own machine.
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: self-hosted
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Check out the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr checkout ${{ inputs.pr }}
       - name: Install
         run: python -m pip install -r requirements.txt
-      - name: Review
+      - name: Review and comment
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACR_PROVIDER: ollama
           ACR_MODEL: qwen2.5-coder:7b
-        run: python -m acr.cli --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }} --local-repo . --ref ${{ github.event.pull_request.head.sha }} --post
+        run: python -m acr.cli --repo ${{ github.repository }} --pr ${{ inputs.pr }} --local-repo . --ref HEAD --post
