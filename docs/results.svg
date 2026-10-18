@@ -1,39 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 352" width="820" height="352" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
-<title id="t">qwen2.5-coder:7b on real CVEs it had never been tuned on</title>
-<desc id="d">Human-labelled. Blue: vulnerable code caught (higher is better). Orange: patched code still flagged (lower is better).</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 468" width="820" height="468" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<title id="t">Static scanner vs AI vs both, on real CVEs (local 7B model)</title>
+<desc id="d">Human-labelled, verifier on. Blue: vulnerable code caught (higher is better). Orange: patched code still flagged (lower is better).</desc>
 <style>:root{--surface:#fcfcfb;--ink:#1d1d1b;--ink2:#5f5e58;--grid:#e4e3de;--s1:#2a78d6;--s2:#eb6834}@media (prefers-color-scheme: dark){:root{--surface:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--grid:#3a3a37;--s1:#3987e5;--s2:#d95926}}.bg{fill:var(--surface)}.t{fill:var(--ink);font-size:16px;font-weight:600}.st,.lab{fill:var(--ink2);font-size:12px}.row{fill:var(--ink);font-size:13px}.val{fill:var(--ink);font-size:12px;font-variant-numeric:tabular-nums}.grid{stroke:var(--grid);stroke-width:1}.s0{fill:var(--s1)}.s1{fill:var(--s2)}</style>
-<rect class="bg" width="820" height="352"/>
-<text class="t" x="16" y="26">qwen2.5-coder:7b on real CVEs it had never been tuned on</text>
-<text class="st" x="16" y="46">Human-labelled. Blue: vulnerable code caught (higher is better). Orange: patched code still flagged (lower is better).</text>
+<rect class="bg" width="820" height="468"/>
+<text class="t" x="16" y="26">Static scanner vs AI vs both, on real CVEs (local 7B model)</text>
+<text class="st" x="16" y="46">Human-labelled, verifier on. Blue: vulnerable code caught (higher is better). Orange: patched code still flagged (lower is better).</text>
 <rect class="s0" x="300" y="56" width="12" height="12" rx="3"/>
 <text class="lab" x="318" y="66">Real CVE caught (strict, human-labelled)</text>
 <rect class="s1" x="586" y="56" width="12" height="12" rx="3"/>
 <text class="lab" x="604" y="66">Patched code still flagged</text>
-<line class="grid" x1="300.0" y1="74" x2="300.0" y2="312"/>
-<text class="lab" x="300.0" y="328" text-anchor="middle">0</text>
-<line class="grid" x1="525.0" y1="74" x2="525.0" y2="312"/>
-<text class="lab" x="525.0" y="328" text-anchor="middle">5</text>
-<line class="grid" x1="750.0" y1="74" x2="750.0" y2="312"/>
-<text class="lab" x="750.0" y="328" text-anchor="middle">10</text>
-<text class="lab" x="300" y="344">number of CVE cases</text>
-<text class="row" x="288" y="100" text-anchor="end">Django (40) · verifier on</text>
-<rect class="s0" x="300" y="80" width="45.0" height="16" rx="4"><title>Django (40) · verifier on: Real CVE caught (strict, human-labelled) = 1/40</title></rect>
-<text class="val" x="351.0" y="92">1/40</text>
-<rect class="s1" x="300" y="98" width="90.0" height="16" rx="4"><title>Django (40) · verifier on: Patched code still flagged = 2/40</title></rect>
-<text class="val" x="396.0" y="110">2/40</text>
-<text class="row" x="288" y="158" text-anchor="end">Django (40) · verifier off</text>
-<rect class="s0" x="300" y="138" width="90.0" height="16" rx="4"><title>Django (40) · verifier off: Real CVE caught (strict, human-labelled) = 2/40</title></rect>
-<text class="val" x="396.0" y="150">2/40</text>
-<rect class="s1" x="300" y="156" width="360.0" height="16" rx="4"><title>Django (40) · verifier off: Patched code still flagged = 8/40</title></rect>
-<text class="val" x="666.0" y="168">8/40</text>
-<text class="row" x="288" y="216" text-anchor="end">Apps: pyload + FAB (39) · verifier on</text>
-<rect class="s0" x="300" y="196" width="180.0" height="16" rx="4"><title>Apps: pyload + FAB (39) · verifier on: Real CVE caught (strict, human-labelled) = 4/39</title></rect>
+<line class="grid" x1="300.0" y1="74" x2="300.0" y2="428"/>
+<text class="lab" x="300.0" y="444" text-anchor="middle">0</text>
+<line class="grid" x1="525.0" y1="74" x2="525.0" y2="428"/>
+<text class="lab" x="525.0" y="444" text-anchor="middle">5</text>
+<line class="grid" x1="750.0" y1="74" x2="750.0" y2="428"/>
+<text class="lab" x="750.0" y="444" text-anchor="middle">10</text>
+<text class="lab" x="300" y="460">number of CVE cases</text>
+<text class="row" x="288" y="100" text-anchor="end">Apps (39) · scanner only</text>
+<rect class="s0" x="300" y="80" width="90.0" height="16" rx="4"><title>Apps (39) · scanner only: Real CVE caught (strict, human-labelled) = 2/39</title></rect>
+<text class="val" x="396.0" y="92">2/39</text>
+<rect class="s1" x="300" y="98" width="135.0" height="16" rx="4"><title>Apps (39) · scanner only: Patched code still flagged = 3/39</title></rect>
+<text class="val" x="441.0" y="110">3/39</text>
+<text class="row" x="288" y="158" text-anchor="end">Apps (39) · AI only</text>
+<rect class="s0" x="300" y="138" width="180.0" height="16" rx="4"><title>Apps (39) · AI only: Real CVE caught (strict, human-labelled) = 4/39</title></rect>
+<text class="val" x="486.0" y="150">4/39</text>
+<rect class="s1" x="300" y="156" width="90.0" height="16" rx="4"><title>Apps (39) · AI only: Patched code still flagged = 2/39</title></rect>
+<text class="val" x="396.0" y="168">2/39</text>
+<text class="row" x="288" y="216" text-anchor="end">Apps (39) · scanner + AI</text>
+<rect class="s0" x="300" y="196" width="180.0" height="16" rx="4"><title>Apps (39) · scanner + AI: Real CVE caught (strict, human-labelled) = 4/39</title></rect>
 <text class="val" x="486.0" y="208">4/39</text>
-<rect class="s1" x="300" y="214" width="90.0" height="16" rx="4"><title>Apps: pyload + FAB (39) · verifier on: Patched code still flagged = 2/39</title></rect>
-<text class="val" x="396.0" y="226">2/39</text>
-<text class="row" x="288" y="274" text-anchor="end">Apps: pyload + FAB (39) · verifier off</text>
-<rect class="s0" x="300" y="254" width="225.0" height="16" rx="4"><title>Apps: pyload + FAB (39) · verifier off: Real CVE caught (strict, human-labelled) = 5/39</title></rect>
-<text class="val" x="531.0" y="266">5/39</text>
-<rect class="s1" x="300" y="272" width="225.0" height="16" rx="4"><title>Apps: pyload + FAB (39) · verifier off: Patched code still flagged = 5/39</title></rect>
-<text class="val" x="531.0" y="284">5/39</text>
+<rect class="s1" x="300" y="214" width="180.0" height="16" rx="4"><title>Apps (39) · scanner + AI: Patched code still flagged = 4/39</title></rect>
+<text class="val" x="486.0" y="226">4/39</text>
+<text class="row" x="288" y="274" text-anchor="end">Django (40) · scanner only</text>
+<rect class="s0" x="300" y="254" width="45.0" height="16" rx="4"><title>Django (40) · scanner only: Real CVE caught (strict, human-labelled) = 1/40</title></rect>
+<text class="val" x="351.0" y="266">1/40</text>
+<rect class="s1" x="300" y="272" width="45.0" height="16" rx="4"><title>Django (40) · scanner only: Patched code still flagged = 1/40</title></rect>
+<text class="val" x="351.0" y="284">1/40</text>
+<text class="row" x="288" y="332" text-anchor="end">Django (40) · AI only</text>
+<rect class="s0" x="300" y="312" width="45.0" height="16" rx="4"><title>Django (40) · AI only: Real CVE caught (strict, human-labelled) = 1/40</title></rect>
+<text class="val" x="351.0" y="324">1/40</text>
+<rect class="s1" x="300" y="330" width="90.0" height="16" rx="4"><title>Django (40) · AI only: Patched code still flagged = 2/40</title></rect>
+<text class="val" x="396.0" y="342">2/40</text>
+<text class="row" x="288" y="390" text-anchor="end">Django (40) · scanner + AI</text>
+<rect class="s0" x="300" y="370" width="45.0" height="16" rx="4"><title>Django (40) · scanner + AI: Real CVE caught (strict, human-labelled) = 1/40</title></rect>
+<text class="val" x="351.0" y="382">1/40</text>
+<rect class="s1" x="300" y="388" width="135.0" height="16" rx="4"><title>Django (40) · scanner + AI: Patched code still flagged = 3/40</title></rect>
+<text class="val" x="441.0" y="400">3/40</text>
 </svg>

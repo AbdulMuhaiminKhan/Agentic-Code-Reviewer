@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -402,3 +403,133 @@ def test_cwe_only_on_security_findings_and_kept_through_dedupe(monkeypatch):
               title="SQL injection risk", explanation="user input in SQL")  # fmt: skip
     [merged] = dedupe([sec, twin])
     assert merged.cwe == "CWE-89"
+
+
+# --- static scanner -------------------------------------------------------------------------------
+
+
+SCAN_DIFF = """diff --git a/shop/app.py b/shop/app.py
+--- a/shop/app.py
++++ b/shop/app.py
+@@ -0,0 +1,14 @@
++import os
++import subprocess
++from flask import redirect, request
++
++
++def login(conn, customer):
++    conn.execute(f"SELECT * FROM orders WHERE customer = '{customer}'")
++    subprocess.run(f"convert {customer}", shell=True)
++    return redirect(request.args.get("next", "/"))
++
++
++def invoice(filename):
++    with open(os.path.join("/srv/invoices", filename), "rb") as fh:
++        return fh.read()
+"""
+
+
+def test_scanner_leads_cover_bandit_and_our_rules_on_added_lines():
+    from acr.scanner import leads_for
+
+    [fd] = parse_diff(SCAN_DIFF)
+    leads = {(lead.line, lead.cwe) for lead in leads_for(fd, repo=None)}
+    assert (7, "CWE-89") in leads  # bandit B608: SQL from an f-string
+    assert (8, "CWE-78") in leads  # bandit B602: shell=True
+    assert (9, "CWE-601") in leads  # our rule: redirect(request.args...)
+    assert (13, "CWE-22") in leads  # our rule: path built from a parameter, never normalised
+    assert not any(line in (1, 2) for line, _ in leads)  # "import subprocess" is not a finding
+
+
+def test_path_rule_stays_quiet_when_the_path_is_sanitised():
+    from acr.scanner import ast_rules
+
+    src = "import os\nfrom werkzeug.utils import secure_filename\n\ndef f(name):\n    return open(os.path.join('/d', secure_filename(name)))\n"
+    assert not [lead for lead in ast_rules(src) if lead.cwe == "CWE-22"]
+
+
+def test_leads_reach_the_security_prompt_and_scanner_mode_skips_the_model(monkeypatch):
+    seen = []
+
+    class _Recorder:
+        def invoke(self, messages):
+            seen.append(messages[1][1])
+            return SpecialistOutput(analysis="", findings=[], need_context=[])
+
+    monkeypatch.setenv("ACR_SCANNER", "1")
+    monkeypatch.setattr(agents, "structured_llm", lambda schema, role="ACR": _Recorder())
+    graph.review(SCAN_DIFF)
+    assert any("Leads from a static scanner" in human and "CWE-601" in human for human in seen)
+
+    monkeypatch.setenv("ACR_MODE", "scanner")
+    monkeypatch.setenv("ACR_VERIFY", "0")
+    monkeypatch.setattr(agents, "structured_llm", lambda *a, **k: pytest.fail("scanner mode must not call the model"))
+    out = graph.review(SCAN_DIFF)
+    assert {f.cwe for f in out["findings"]} >= {"CWE-89", "CWE-78", "CWE-601", "CWE-22"}
+    assert all(f.agents == ["scanner"] for f in out["findings"])
+
+
+def test_dedupe_keeps_different_vulnerabilities_on_adjacent_lines():
+    sqli = _f(line=7, cwe="CWE-89", title="SQL injection")
+    cmdi = _f(line=8, cwe="CWE-78", title="Command injection", evidence="x")
+    assert len(dedupe([sqli, cmdi])) == 2
+
+
+# --- reviewing your own staged changes -----------------------------------------------------------------
+
+
+def test_staged_mode_reads_the_index_not_the_last_commit(tmp_path):
+    import subprocess
+
+    from acr.cli import staged_diff
+    from acr.tools import STAGED, RepoContext
+
+    root = _git_repo(tmp_path, {"app.py": "def f(x):\n    return x\n"})
+    (tmp_path / "app.py").write_text("def f(x):\n    return eval(x)\n", encoding="utf-8")
+    subprocess.run(["git", "-C", root, "add", "app.py"], check=True)
+    [fd] = parse_diff(staged_diff(root))
+    assert fd.added_lines == {2: "    return eval(x)"}
+    repo = RepoContext(root, STAGED)
+    assert "eval(x)" in repo.file_text("app.py")  # the staged version, not HEAD
+    assert "app.py:2:" in repo.grep("eval(")
+
+
+def test_hook_install_and_uninstall_only_touch_our_own_hook(tmp_path):
+    from acr import hook
+
+    root = Path(_git_repo(tmp_path, {"a.py": "x = 1\n"}))
+    path = hook.install(root, fail_on="high")
+    text = path.read_text(encoding="utf-8")
+    assert hook.MARKER in text and "--staged --fail-on high" in text
+    assert hook.uninstall(root) and not path.exists()
+    path.write_text("#!/bin/sh\necho mine\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        hook.install(root)  # never overwrite someone else's hook without --force
+    assert not hook.uninstall(root) and path.exists()
+
+
+def test_paths_mode_reviews_whole_files_and_skips_virtualenvs(tmp_path):
+    from acr.cli import files_as_diff
+
+    (tmp_path / "app.py").write_text("import os\n\nos.system(input())\n", encoding="utf-8")
+    (tmp_path / ".venv" / "lib").mkdir(parents=True)
+    (tmp_path / ".venv" / "lib" / "dep.py").write_text("x = 1\n", encoding="utf-8")
+    fds = parse_diff(files_as_diff([str(tmp_path)], root=str(tmp_path)))
+    assert [fd.path for fd in fds] == ["app.py"]
+    assert fds[0].added_lines[3] == "os.system(input())"
+
+
+def test_grounding_ignores_requoted_strings():
+    diff = (
+        'diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -0,0 +1 @@\n+    return redirect(request.args.get("next", "/"))\n'
+    )
+    [fd] = parse_diff(diff)
+    f = _f(file="a.py", line=1, evidence="return redirect(request.args.get('next', '/'))")
+    assert ground(f, fd) is not None
+
+
+def test_dedupe_prefers_the_security_agents_version():
+    err = _f(category="error_handling", agents=["error_handling"], title="SQL injection risk", explanation="user input in SQL")
+    sec = _f(title="SQL injection via f-string", explanation="user input in SQL", cwe="CWE-89")
+    [merged] = dedupe([err, sec])
+    assert merged.category == "security" and merged.cwe == "CWE-89"

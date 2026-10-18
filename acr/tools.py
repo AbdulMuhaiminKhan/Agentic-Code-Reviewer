@@ -8,12 +8,18 @@ from functools import cache
 from pathlib import Path, PurePosixPath
 
 MAX_TOOL_CHARS = 6000
+STAGED = ":staged"  # pseudo-ref: the git index
 MAX_CALL_SITES = 25  # more call sites than this = a generic name (as_sql, get), not worth tracing
 
 
 class RepoContext:
     def __init__(self, root: str, ref: str = "HEAD"):
         self.root, self.ref = root, ref
+        # STAGED means "the git index" (what `git commit` would record), for reviewing changes before committing.
+        staged = ref == STAGED
+        self._tree = ["--cached"] if staged else [ref]  # what git grep searches
+        self._show = "" if staged else ref  # `git show :path` reads the index
+        self._prefix = "" if staged else f"{ref}:"  # git grep prefixes hits with the ref, not with --cached
 
     def _git(self, *args: str) -> str:
         try:
@@ -29,11 +35,16 @@ class RepoContext:
         p = PurePosixPath(path.strip().lstrip("/"))
         return None if ".." in p.parts or not str(p) else str(p)
 
+    def file_text(self, path: str) -> str:
+        """The raw file at the ref ("" if missing or the path is unsafe)."""
+        safe = self._safe_path(path)
+        return self._git("show", f"{self._show}:{safe}") if safe else ""
+
     def read_file(self, path: str, start: int = 1, end: int | None = None) -> str:
         safe = self._safe_path(path)
         if not safe:
             return f"[refused path: {path}]"
-        text = self._git("show", f"{self.ref}:{safe}")
+        text = self._git("show", f"{self._show}:{safe}")
         if not text:
             return f"[file not found at {self.ref}: {safe}]"
         lines = text.splitlines()
@@ -45,29 +56,31 @@ class RepoContext:
         if not literal.strip():
             return "[empty pattern]"
         # -F literal match, -e so a pattern starting with '-' is never parsed as an option
-        out = self._git("grep", "-n", "-I", "-F", "-e", literal, self.ref, "--")
-        hits = [h.removeprefix(f"{self.ref}:") for h in out.splitlines()[:max_hits]]
+        out = self._git("grep", "-n", "-I", "-F", "-e", literal, *self._tree, "--")
+        hits = [h.removeprefix(self._prefix) for h in out.splitlines()[:max_hits]]
         return ("\n".join(hits) or "[no matches]")[:MAX_TOOL_CHARS]
 
     def related_tests(self, src_path: str, symbols: list[str]) -> str:
         """Deterministic test discovery: test files named after the module + tests mentioning new symbols."""
         stem = PurePosixPath(src_path).stem
-        all_files = self._git("ls-tree", "-r", "--name-only", self.ref).splitlines()
+        all_files = (
+            self._git("ls-files") if self.ref == STAGED else self._git("ls-tree", "-r", "--name-only", self.ref)
+        ).splitlines()
         by_name = [f for f in all_files if f.endswith(".py") and f"test_{stem}" in f or f.endswith(f"/{stem}_test.py")]
         mentions = []
         for sym in symbols[:8]:
-            out = self._git("grep", "-l", "-F", "-e", sym, self.ref, "--")
-            mentions += [h.removeprefix(f"{self.ref}:") for h in out.splitlines() if "test" in h.lower()]
+            out = self._git("grep", "-l", "-F", "-e", sym, *self._tree, "--")
+            mentions += [h.removeprefix(self._prefix) for h in out.splitlines() if "test" in h.lower()]
         candidates = list(dict.fromkeys(by_name + mentions))[:5]
         if not candidates:
             return "[no existing test files reference this module or its new symbols]"
         chunks = []
         for f in candidates:
-            hits = [h for sym in symbols[:8] for h in self._git("grep", "-n", "-F", "-e", sym, self.ref, "--", f).splitlines()]
+            hits = [h for sym in symbols[:8] for h in self._git("grep", "-n", "-F", "-e", sym, *self._tree, "--", f).splitlines()]
             chunks.append(
                 f"# {f}\n"
                 + (
-                    "\n".join(h.removeprefix(f"{self.ref}:") for h in hits[:15])
+                    "\n".join(h.removeprefix(self._prefix) for h in hits[:15])
                     or "(file exists, no direct mention of the new symbols)"
                 )
             )
@@ -78,10 +91,10 @@ class RepoContext:
         which also prints the header line (def/class) that encloses every match."""
         # Without `diff=python`, git's default heuristic reports the enclosing *class* instead of the method.
         attrs = f"core.attributesFile={_python_gitattributes()}"
-        out = self._git("-c", attrs, "grep", "-n", "-p", "-I", "-F", "-e", f"{sym}(", self.ref, "--", "*.py")
+        out = self._git("-c", attrs, "grep", "-n", "-p", "-I", "-F", "-e", f"{sym}(", *self._tree, "--", "*.py")
         sites, func = [], "<module>"
         for raw in out.splitlines():
-            m = _GREP_LINE.match(raw.removeprefix(f"{self.ref}:"))
+            m = _GREP_LINE.match(raw.removeprefix(self._prefix))
             if not m:
                 continue
             path, sep, line, text = m.groups()

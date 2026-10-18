@@ -21,6 +21,7 @@ diff ─► parse ─► fan-out (file × specialist) ─► aggregate ─► ve
 | Stage | Code | LLM? | Why it exists |
 |---|---|---|---|
 | Parse | `acr/diff_parser.py` | no | Prints each line with its real line number. Small models can't count lines. |
+| Scan | `acr/scanner.py` | no | Bandit + precise AST rules (open redirect, path traversal, SSRF) on the added lines. Hits become leads for the security agent. |
 | Fan-out | `acr/graph.py` | - | LangGraph `Send`: one task per (file, specialist), run in parallel. One file and one concern per call keeps a 7B model focused. |
 | Specialists | `acr/agents.py` | yes | Answer in a strict JSON schema: `analysis`, then findings with a verbatim quote, then optional context requests. |
 | Context | `acr/tools.py` | no | `git show` / `git grep` at the PR's commit. Callers of changed functions (two levels up) for security; related tests for coverage. |
@@ -55,7 +56,9 @@ diff ─► parse ─► fan-out (file × specialist) ─► aggregate ─► ve
 3. **The verifier removes signal and noise about equally** with a 7B model (on the Django test set it discarded the one consistent real catch).
 4. **Dev improvements didn't always transfer.** Two-level caller tracing helped on dev and was neutral on test (within noise). It's reported as-is.
 5. **Where it works:** application code (path traversal, SQL injection, leaked error details, bypassable checks) where the attacker input and the sink are in the same function. **Where it doesn't:** framework internals, where the input arrives through several files.
-6. **The pipeline is not the bottleneck:** shown the fix being removed, it catches 11/40 Django CVEs vs 1-3/40 unaided.
+6. **A static scanner is a trade, not a free win.** On its own it never distinguished vulnerable from patched code. As leads for the AI it surfaced new real catches (SSRF, XML entity parsing, SQL from a lookup name) and fixed the demo's missed open redirect, but it also added false alarms; with the verifier on, real-CVE recall didn't move.
+7. **Exact-match checks hurt real catches:** a correct finding was thrown away because the model quoted `'next'` for `"next"`. Grounding now normalises quotes.
+8. **The pipeline is not the bottleneck:** shown the fix being removed, it catches 11/40 Django CVEs vs 1-3/40 unaided.
 
 ## Limits and next steps
 

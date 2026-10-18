@@ -132,8 +132,21 @@ def test_context(fd: FileDiff, repo: RepoContext | None, diff_tests: str) -> str
     return extra
 
 
+LEADS_HEADER = (
+    "## Leads from a static scanner\n"
+    "A rule-based scanner flagged these added lines. Check each one: report it as a finding only if the flagged value "
+    "can really be controlled by an attacker and is not already validated or escaped; otherwise ignore it. Scanners "
+    "miss logic bugs, so also look for problems it cannot see.\n"
+)
+
+
 def run_specialist(
-    kind: str, fd: FileDiff, repo: RepoContext | None, diff_tests: str = "", errors: list[str] | None = None
+    kind: str,
+    fd: FileDiff,
+    repo: RepoContext | None,
+    diff_tests: str = "",
+    errors: list[str] | None = None,
+    leads: list | None = None,
 ) -> list[Finding]:
     """Review one file for one concern. A failed model call returns [] and is recorded in `errors`,
     so the review can say it is incomplete instead of looking like a clean approval."""
@@ -142,6 +155,8 @@ def run_specialist(
     if kind == "security" and repo and os.getenv("ACR_SECURITY_PROMPT", "v2") != "v1":
         callers = repo.callers(new_symbols(fd.added_lines), exclude=fd.path)
         extra += f"## Callers of the functions in this change\n{callers}\n\n"
+    if kind in ("security", "all") and leads:
+        extra += LEADS_HEADER + "\n".join(lead.render() for lead in leads) + "\n\n"
 
     out: SpecialistOutput | None = None
     for round_ in range(MAX_TOOL_ROUNDS + 1):
@@ -222,6 +237,8 @@ def synthesize(findings: list[Finding], n_files: int) -> Synthesis:
         )
     listing = "\n".join(f"- [{f.severity}] {f.category} {f.file}:{f.line} {f.title}" for f in findings)
     try:
+        if os.getenv("ACR_MODE") == "scanner":
+            raise RuntimeError("scanner-only baseline uses no model")  # falls through to the plain summary below
         out = structured_llm(Synthesis).invoke([("system", SYNTH_PROMPT), ("human", listing)])
         if out:
             return out

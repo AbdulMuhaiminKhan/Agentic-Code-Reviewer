@@ -13,7 +13,8 @@ _WORD = re.compile(r"[a-z_][a-z0-9_]{2,}")
 
 
 def _norm(s: str) -> str:
-    return _WS.sub(" ", s).strip()
+    # Models re-type quotes when they copy code ('next' for "next"); that must not make a real finding "ungrounded".
+    return _WS.sub(" ", s.replace("'", '"').replace("`", "")).strip()
 
 
 def ground(f: Finding, fd: FileDiff, window: int = 3) -> Finding | None:
@@ -37,6 +38,8 @@ def _similar(a: Finding, b: Finding) -> bool:
     wa = set(_WORD.findall((a.title + " " + a.explanation).lower()))
     wb = set(_WORD.findall((b.title + " " + b.explanation).lower()))
     jaccard = len(wa & wb) / max(1, len(wa | wb))
+    if a.cwe and b.cwe and a.cwe != b.cwe:
+        return False  # SQL injection on line 7 and command injection on line 8 are two issues, not one
     if a.category == b.category or jaccard >= 0.25:
         return True
     # Another agent straying into security's lane on the very same line ("security risk: shell=True")
@@ -49,7 +52,8 @@ def _similar(a: Finding, b: Finding) -> bool:
 
 def dedupe(findings: list[Finding], line_window: int = 2) -> list[Finding]:
     kept: list[Finding] = []
-    for f in sorted(findings, key=lambda x: (-SEVERITY_RANK[x.severity], -x.confidence)):
+    # Keep the most severe, then the security agent's version (its label and CWE), then the most confident.
+    for f in sorted(findings, key=lambda x: (-SEVERITY_RANK[x.severity], x.category != "security", -x.confidence)):
         dup = next((k for k in kept if k.file == f.file and abs(k.line - f.line) <= line_window and _similar(k, f)), None)
         if dup:
             dup.agents = sorted(set(dup.agents + f.agents))

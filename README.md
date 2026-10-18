@@ -4,7 +4,7 @@ A multi-agent reviewer for pull requests that checks **security**, **error handl
 
 **Cost: $0.** No hosted LLM API, no paid service, no cloud resources. The only network calls go to GitHub's REST API (reading diffs and advisories, and optionally posting a PR comment).
 
-> **Honest summary (2026-10-16).** The reviewer runs end to end on a laptop RTX 4070 (8 GB) and catches obvious planted bugs. On **real** vulnerabilities, a local 7B model catches **1-3 of 40 Django CVEs** depending on the configuration, and about as often flags the already-patched code. On application-level CVEs (pyload, Flask-AppBuilder) it catches **4 of 39** (10%) with only 2 false alarms, including 3 of the 21 published after the model's release. Shown the fix being removed (a leaky upper bound) it catches 11/40 Django CVEs, so the model's unaided judgement is the bottleneck, not the pipeline. Every number below was measured; nothing is estimated.
+> **Honest summary (2026-10-18).** The reviewer runs end to end on a laptop RTX 4070 (8 GB). On a demo repo with planted bugs it catches **7 of 7** and approves the clean pull request. On **real** vulnerabilities, a local 7B model catches **4 of 39** application-level CVEs (pyload, Flask-AppBuilder; 3 of them published after the model's release) and **1-4 of 40** Django framework CVEs depending on configuration, and it flags already-patched code about as often as it catches. Adding a static scanner (Bandit + precise rules) in front of the AI finds more real bugs, but also more false alarms. Shown the fix being removed (a leaky upper bound) it catches 11/40 Django CVEs, so the model's unaided judgement is the bottleneck, not the pipeline. Every number below was measured; nothing is estimated.
 
 ![Results chart](docs/results.svg)
 
@@ -13,7 +13,8 @@ A multi-agent reviewer for pull requests that checks **security**, **error handl
 ```mermaid
 flowchart LR
     A[PR / commit / branch diff<br/>GitHub API, git or file] --> B[Diff parser<br/>line-numbered hunks]
-    B --> C{Fan-out<br/>file x agent}
+    B --> SC[Static scanner<br/>Bandit + rules]
+    SC --> C{Fan-out<br/>file x agent}
     C --> S[Security agent]
     C --> E[Error-handling agent]
     C --> T[Test-coverage agent]
@@ -32,11 +33,12 @@ flowchart LR
 
 1. **Get the diff.** `acr/cli.py` reads a unified diff from a file, runs `git diff base...branch` on a local repo, or asks the GitHub API for a commit or PR diff (`acr/github_client.py`). Before anything slow, it checks that Ollama is running and the model is pulled.
 2. **Parse it** (`acr/diff_parser.py`). Each changed `.py` file becomes a `FileDiff`. Every line is printed with its real line number in the new file (`   15 +     query = f"..."`), because small models are bad at counting lines. Test files are marked so they're used as context, not reviewed.
-3. **Fan out** (`acr/graph.py`). LangGraph's `Send` creates one task per (file × specialist). With 3 files and 3 specialists that's 9 independent LLM calls, each seeing one file with one job.
-4. **Specialists** (`acr/agents.py`). Each answers in JSON matching a Pydantic schema: a short `analysis` first, then findings (line, severity, verbatim evidence, explanation, fix, confidence), plus optional `need_context` requests (`read_file`, `grep`) that the graph runs with read-only `git show` / `git grep` at the PR's commit (`acr/tools.py`), for up to 2 rounds. Deterministic context is added without asking the model: the security agent gets the **callers of each changed function, two levels up** (for example `get_supported_language_variant ← get_language_from_path ← LocaleMiddleware.process_request(request.path_info)`), and the test-coverage agent gets the related tests.
-5. **Aggregate** (`acr/aggregate.py`, plain Python). *Grounding* drops any finding whose quoted evidence isn't a real added line, and snaps line numbers to the matching line. Low-confidence findings are dropped. Duplicates (same file, nearby lines, same topic) are merged.
-6. **Verify.** A second, skeptical prompt re-checks each finding. Coverage claims are checked against the same tests the specialist saw.
-7. **Synthesize and render.** One last call writes a short summary and a verdict; `acr/render.py` turns everything into Markdown. If any agent call failed, the review says "⚠️ incomplete" and never approves. With `--post`, the PR comment is created or edited in place.
+3. **Scan** (`acr/scanner.py`, no model). Bandit plus a few precise AST rules (open redirect, path traversal, SSRF) run on the added lines. Their hits become *leads* for the security agent to confirm or dismiss, because rule-based scanners are good at patterns and bad at judgement, and LLMs are the opposite.
+4. **Fan out** (`acr/graph.py`). LangGraph's `Send` creates one task per (file × specialist). With 3 files and 3 specialists that's 9 independent LLM calls, each seeing one file with one job.
+5. **Specialists** (`acr/agents.py`). Each answers in JSON matching a Pydantic schema: a short `analysis` first, then findings (line, severity, verbatim evidence, explanation, fix, confidence), plus optional `need_context` requests (`read_file`, `grep`) that the graph runs with read-only `git show` / `git grep` at the PR's commit (`acr/tools.py`), for up to 2 rounds. Deterministic context is added without asking the model: the security agent gets the **callers of each changed function, two levels up** (for example `get_supported_language_variant ← get_language_from_path ← LocaleMiddleware.process_request(request.path_info)`), and the test-coverage agent gets the related tests.
+6. **Aggregate** (`acr/aggregate.py`, plain Python). *Grounding* drops any finding whose quoted evidence isn't a real added line, and snaps line numbers to the matching line. Low-confidence findings are dropped. Duplicates (same file, nearby lines, same topic) are merged.
+7. **Verify.** A second, skeptical prompt re-checks each finding. Coverage claims are checked against the same tests the specialist saw.
+8. **Synthesize and render.** One last call writes a short summary and a verdict; `acr/render.py` turns everything into Markdown. If any agent call failed, the review says "⚠️ incomplete" and never approves. With `--post`, the PR comment is created or edited in place.
 
 ### Key decisions (and what the measurements said about them)
 
@@ -51,6 +53,8 @@ flowchart LR
 **The verifier trades recall for precision almost 1:1.** It is on by default because it keeps reviews readable (about 1.5 findings per clean snippet instead of 4). On the Django test set it also threw away 1-2 of the 2-3 real catches. Pick `ACR_VERIFY=0` if you prefer recall.
 
 **Multi-agent vs one prompt.** With this model, three specialists cost 2x the time of one prompt and caught more only with the verifier off. The architecture is there for stronger models, and the ablation switch shows exactly what it buys.
+
+**Scanner + AI, measured honestly.** The scanner alone catches 2/39 app CVEs and 1/40 Django CVEs, and flags the patched code just as often (0 clean catches). Feeding its hits to the AI as leads raised what the AI finds (Django with the verifier off: 2 → 4 of 40; the demo's missed open redirect is now caught), but the extra leads also produce extra false alarms, and with the verifier on the real-CVE numbers didn't move. The scanner is on by default (`ACR_SCANNER=1`) because it costs about a second and catches classic patterns reliably.
 
 **Snapshot backtesting, not "revert the fix".** Reviewing the reverse of a fix commit shows the protective code being deleted, which leaks the answer (and measurably inflates recall, see below). The harness shows the vulnerable *function(s)* as newly added code, then the same functions after the fix as a control.
 
@@ -103,6 +107,15 @@ python -m acr.cli --diff-file examples/demo.diff --local-repo data/demo-repo -v 
 # Review a local branch against its base, no GitHub needed
 python -m acr.cli --local-repo path\to\repo --base main --ref my-feature
 
+# Review what you're about to commit (the staged version), and fail on serious findings
+python -m acr.cli --local-repo . --staged --fail-on high
+
+# Review whole files or folders, no git needed (e.g. an existing project)
+python -m acr.cli --paths path\to\project
+
+# Install it as a git pre-commit hook in one of your repos (blocks only on high/critical findings)
+python -m acr.hook install path\to\repo
+
 # Review a public commit (diff only)
 python -m acr.cli --repo django/django --commit <sha>
 
@@ -110,7 +123,7 @@ python -m acr.cli --repo django/django --commit <sha>
 python -m acr.cli --repo you/yourrepo --pr 3 --local-repo . --post
 ```
 
-`-v` logs each agent's raw finding count and every finding dropped by grounding, confidence or the verifier, with the reason. The CLI exits with code 2 if Ollama or the model is missing, and 1 if some agent calls failed (the review is then marked incomplete).
+`-v` logs each agent's raw finding count and every finding dropped by grounding, confidence or the verifier, with the reason. The CLI exits with code 2 if Ollama or the model is missing, 1 if some agent calls failed (the review is then marked incomplete), and 3 if `--fail-on` was given and a finding reached that severity. The pre-commit hook never blocks a commit just because the reviewer couldn't run, and `git commit --no-verify` skips it.
 
 Configuration lives in `.env` (see `.env.example`):
 
@@ -119,7 +132,8 @@ Configuration lives in `.env` (see `.env.example`):
 | `ACR_MODEL` | `qwen2.5-coder:7b` | any Ollama model tag |
 | `ACR_NUM_CTX` | `16384` | context window. Ollama **silently truncates** beyond it. Lower to 8192 if `ollama ps` shows less than 100% GPU |
 | `ACR_NUM_PREDICT` | `2048` | max tokens per answer (stops runaway generations) |
-| `ACR_MODE` | `multi` | `single` = one-prompt baseline |
+| `ACR_MODE` | `multi` | `single` = one-prompt baseline, `scanner` = static scanner only (no model) |
+| `ACR_SCANNER` | `1` | `0` turns off the static-scanner leads |
 | `ACR_VERIFY` | `1` | `0` turns the verifier off: more recall, much more noise |
 | `ACR_MIN_CONFIDENCE` | `0.5` | findings below this are dropped |
 | `ACR_MAX_CONCURRENCY` | `1` | one GPU: parallel requests just queue in Ollama |
@@ -139,7 +153,7 @@ pyright                    # type check (same engine as VS Code's Pylance)
 pytest -q
 ```
 
-`tests/test_core.py` (23 tests) covers the Streamlit app (run headless with `streamlit.testing`), plus the diff parser, grounding, dedupe and snapshot diffs; a full LangGraph run end to end; the incomplete-review path when agent calls fail; the Ollama preflight; local-branch diffs; PR-comment pagination; caller tracing; the human-label scorer; and a regression test for every bug found in real runs (the `{}` schema shortcut, reasoning-before-verdict order, coverage claims verified against the tests, `--post` validated before the slow review). The model and GitHub are stubbed (clearly, in the test code), so the suite runs in a few seconds with no Ollama and no network. That proves the plumbing, not the model's quality: quality is what the backtests measure.
+`tests/test_core.py` (33 tests) covers the Streamlit app (run headless with `streamlit.testing`), plus the diff parser, grounding, dedupe and snapshot diffs; a full LangGraph run end to end; the incomplete-review path when agent calls fail; the Ollama preflight; local-branch diffs; PR-comment pagination; caller tracing; the human-label scorer; the static scanner and its leads; staged reviews and the pre-commit hook; whole-file reviews; and a regression test for every bug found in real runs (the `{}` schema shortcut, reasoning-before-verdict order, coverage claims verified against the tests, `--post` validated before the slow review). The model and GitHub are stubbed (clearly, in the test code), so the suite runs in a few seconds with no Ollama and no network. That proves the plumbing, not the model's quality: quality is what the backtests measure.
 
 ## Backtesting results
 
@@ -159,18 +173,24 @@ pytest -q
 
 | Benchmark · configuration | Caught (95% CI) | False alarms on patched code | Findings per clean snippet | Median latency per review |
 |---|---|---|---|---|
-| **Django 40 · final config** (prompt v2, callers 2 levels, verifier on) | 1/40 = 2% (0-13%) | 2/40 | 1.50 | 55 s |
-| Django 40 · final config, verifier off | 2/40 = 5% (1-17%) | 8/40 | 4.05 | - |
+| **Django 40 · hybrid: scanner leads + AI, verifier on** (current default) | 1/40 = 2% (0-13%) | 3/40 | 1.52 | 56 s |
+| Django 40 · hybrid, verifier off | **4/40 = 10% (4-23%)** | 10/40 | 4.10 | - |
+| Django 40 · scanner only (no AI) | 1/40 = 2% (0-13%) | 1/40 | 0.15 | <1 s |
+| Django 40 · AI only (prompt v2, callers 2 levels, verifier on) | 1/40 = 2% (0-13%) | 2/40 | 1.50 | 55 s |
+| Django 40 · AI only, verifier off | 2/40 = 5% (1-17%) | 8/40 | 4.05 | - |
 | Django 40 · prompt v2, callers 1 level, verifier on | 2/40 = 5% (1-17%) | 2/40 | 1.52 | 55 s |
 | Django 40 · prompt v2, callers 1 level, verifier off | 3/40 = 8% (3-20%) | 5/40 | 4.03 | 39 s |
 | Django 40 · single prompt, verifier on | 0/40 = 0% (0-9%) | 3/40 | 0.90 | 28 s |
 | Django 40 · before the schema fix (multi / single) | 0/40 (judge-audited only) | 0/40 | 1.98 / 0.82 | 47 s / 21 s |
 | Django 40 · **reverse mode, leaky upper bound** (sees the fix being removed) | 11/40 = 28% (16-43%) | n/a | - | 36 s |
-| **Apps 39 · final config** | **4/39 = 10% (4-24%)** | 2/39 | 2.51 | 63 s |
-| Apps 39 · final config, verifier off | 5/39 = 13% (6-27%) | 5/39 | 4.54 | - |
+| **Apps 39 · hybrid, verifier on** (current default) | **4/39 = 10% (4-24%)** | 4/39 | 2.44 | 78 s |
+| Apps 39 · hybrid, verifier off | 5/39 = 13% (6-27%) | 9/39 | 4.74 | - |
+| Apps 39 · scanner only (no AI) | 2/39 = 5% (1-17%) | 3/39 | 0.15 | <1 s |
+| **Apps 39 · AI only, verifier on** | **4/39 = 10% (4-24%)** | **2/39** | 2.51 | 63 s |
+| Apps 39 · AI only, verifier off | 5/39 = 13% (6-27%) | 5/39 | 4.54 | - |
 | Django 40 · `qwen2.5-coder:14b` | _tested, too slow on this hardware_ (see below) | | | |
 
-"Verifier off" rows for the final config come from the same run: the specialists are deterministic (temperature 0) and the verifier's rejects are judged and stored, so `python -m eval.audit score <run> --ignore-verifier` gives the verifier-off result. I checked this against a separate `ACR_VERIFY=0` run: identical.
+"Verifier off" rows for the AI-only and hybrid configs come from the same run as their "verifier on" rows: the specialists are deterministic (temperature 0) and the verifier's rejects are judged and stored, so `python -m eval.audit score <run> --ignore-verifier` gives the verifier-off result. I checked this against a separate `ACR_VERIFY=0` run: identical.
 
 Reports: `results/*.md`. Per-case JSON (every finding, every judge verdict, latencies) lives in the timestamped run folders, which are git-ignored because they're large.
 
@@ -179,6 +199,7 @@ Reports: `results/*.md`. Per-case JSON (every finding, every judge verdict, late
 - **A local 7B model is not a security reviewer for framework code.** 1-3 of 40 real Django CVEs, depending on settings, and it flags the patched code about as often. The catch that shows up in every run (sometimes thrown away by the verifier) is CVE-2019-14234, SQL injection through the JSONField/HStoreField key name.
 - **The pipeline isn't the bottleneck.** When the diff shows the fix being removed, the same pipeline catches 11/40. What's missing is the model noticing the bug without a hint.
 - **Application code is where it starts to work.** On pyload and Flask-AppBuilder it caught 4/39 with the verifier on, and **all 4 were clean catches** (the patched version was not flagged): SQL injection built from URLs (CVE-2025-55156), path traversal via a package name (CVE-2025-54802), a bypassable storage-folder check (CVE-2024-47821) and database errors shown to users (CVE-2023-34110, borderline: right spot, but the model calls it logging). 3 of those 4 were published after the model's release, so this isn't memorisation. App bugs are local: the dangerous value and the sink sit in the same function, which suits a one-file reviewer.
+- **Scanner + AI is a trade, not a free win.** The scanner on its own never tells vulnerable from patched code (0 clean catches on both benchmarks). As leads for the AI it surfaced new real catches: an SSRF (CVE-2026-35187), XML entity parsing (CVE-2013-1665) and SQL built from a lookup name (CVE-2022-34265). But the verifier threw most of them away, and the extra leads added false alarms. On apps the hybrid catches 4/39 with 3 clean catches vs 4/39 with 4 clean for the AI alone: within noise.
 - **Tuning on dev didn't transfer.** Two-level caller tracing raised dev recall from 1/20 to 2/20, and on the test set it moved recall from 2/40 to 1/40 (verifier on). That's all within noise, and I didn't re-tune on the test set.
 - **The verifier removes signal and noise about equally;** the single prompt is 2x faster and quieter and catches nothing more.
 
@@ -219,12 +240,12 @@ python -m eval.plot_results                                     # results/summar
 
 | PR | Planted | Review comment |
 |---|---|---|
-| [#1 order search](https://github.com/AbdulMuhaiminKhan/acr-demo-shop/pull/1) | SQL injection, open redirect after login | ✅ SQL injection (high) · ❌ missed the open redirect |
+| [#1 order search](https://github.com/AbdulMuhaiminKhan/acr-demo-shop/pull/1) | SQL injection, open redirect after login | ✅ both (the open redirect was missed before the scanner and a quote-normalisation fix) |
 | [#2 invoice download](https://github.com/AbdulMuhaiminKhan/acr-demo-shop/pull/2) | path traversal, `except Exception: pass` | ✅ both |
 | [#3 thumbnails](https://github.com/AbdulMuhaiminKhan/acr-demo-shop/pull/3) | command injection (`shell=True`), untested helper | ✅ both, plus a fair path-traversal note on the upload name |
 | [#4 pricing refactor](https://github.com/AbdulMuhaiminKhan/acr-demo-shop/pull/4) | nothing (clean, with tests) | ✅ "Looks good" |
 
-6 of 7 planted bugs caught, and the clean PR approved. Re-running `--post` edits the existing comment instead of adding a new one (checked on PR #4). This demo also exposed a duplicate: the error-handling agent called `shell=True` a security risk on the same line as the security agent's finding. Dedupe now merges that case.
+**7 of 7** planted bugs caught, and the clean PR approved (6 of 7 before the hybrid scanner and two grounding/dedupe fixes: the model had found the open redirect but quoted `'next'` where the code says `"next"`, and an exact-match check threw the finding away). Re-running `--post` edits the existing comment instead of adding a new one (checked on PR #4). This demo also exposed a duplicate: the error-handling agent called `shell=True` a security risk on the same line as the security agent's finding. Dedupe now merges that case.
 
 ## GitHub Action (self-hosted, manual)
 
@@ -247,7 +268,8 @@ python -m eval.plot_results                                     # results/summar
 ## Project layout
 
 ```
-acr/            reviewer: diff_parser, agents (prompts), tools (git read/grep/callers), aggregate, graph, render, config, cli
+acr/            reviewer: diff_parser, scanner (Bandit + rules), agents (prompts), tools (git read/grep/callers),
+                aggregate, graph, render, config, cli, hook (git pre-commit)
 ui/            Streamlit web UI (app.py); .streamlit/config.toml keeps it on localhost
 eval/           build_dataset, snapshot, judge, backtest (Wilson CIs, --split/--resume/--mode),
                 audit (human labels), tune_security (dev-only loop), plot_results, splits/, labels/

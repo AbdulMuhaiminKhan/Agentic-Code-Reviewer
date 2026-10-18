@@ -47,7 +47,7 @@ def git_diff(repo: str, base: str, head: str) -> tuple[str, str]:
 def expected_calls(diff_text: str, mode: str) -> int:
     """How many specialist calls the graph will fan out to, for the progress bar."""
     files = [fd for fd in parse_diff(diff_text) if fd.reviewable and not fd.is_test]
-    return len(files) * (1 if mode == "single" else len(SPECIALISTS))
+    return len(files) * {"single": 1, "scanner": 0}.get(mode, len(SPECIALISTS))
 
 
 def findings_table(findings) -> pd.DataFrame:
@@ -111,11 +111,20 @@ with st.sidebar:
     st.subheader("Settings")
     mode = st.radio(
         "Agents",
-        ["multi", "single"],
-        format_func=lambda m: {"multi": "3 specialists (multi-agent)", "single": "1 prompt (baseline)"}[m],
+        ["multi", "single", "scanner"],
+        format_func=lambda m: {
+            "multi": "3 specialists (multi-agent)",
+            "single": "1 prompt (baseline)",
+            "scanner": "Static scanner only (no AI)",
+        }[m],
     )
     verify = st.toggle(
         "Verifier pass", value=True, help="A second, skeptical prompt re-checks each finding. Off = more recall, much more noise."
+    )
+    scanner = st.toggle(
+        "Static scanner leads",
+        value=True,
+        help="Bandit plus precise rules flag risky lines first; the security agent confirms or dismisses them.",
     )
     min_conf = st.slider("Minimum confidence", 0.0, 1.0, float(env("ACR_MIN_CONFIDENCE", "0.5")), 0.05)
     st.caption(f"Context window `{env('ACR_NUM_CTX', '16384')}` tokens · change the model in `.env`")
@@ -176,11 +185,16 @@ with tab_review:
                 icon="ℹ️",
             )
 
-    run = st.button(
-        "Run review", type="primary", disabled=bool(problem) or not diff_text.strip() or not expected_calls(diff_text, mode)
-    )
+    run = st.button("Run review", type="primary", disabled=(bool(problem) and mode != "scanner") or not diff_text.strip())
     if run:
-        os.environ.update({"ACR_MODE": mode, "ACR_VERIFY": "1" if verify else "0", "ACR_MIN_CONFIDENCE": str(min_conf)})
+        os.environ.update(
+            {
+                "ACR_MODE": mode,
+                "ACR_VERIFY": "1" if verify and mode != "scanner" else "0",
+                "ACR_SCANNER": "1" if scanner or mode == "scanner" else "0",
+                "ACR_MIN_CONFIDENCE": str(min_conf),
+            }
+        )
         total, done, t0 = max(n_calls, 1), 0, time.perf_counter()
         bar = st.progress(0.0, text="Starting…")
         with st.status("Reviewing…", expanded=False) as status:
