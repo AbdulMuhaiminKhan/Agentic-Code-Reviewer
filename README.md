@@ -159,7 +159,7 @@ pytest -q
 
 ### Method
 
-1. **Ground truth:** GitHub Security Advisories with a fix commit that exists in a full clone of the repo and touches 1-3 non-test `.py` files.
+1. **Ground truth (79 real vulnerabilities in total):** GitHub Security Advisories with a fix commit that exists in a full clone of the repo and touches 1-3 non-test `.py` files.
    - **Django:** 134 cases, split once into **dev = 94** (the only cases prompts were tuned on) and **test = 40** (only ever measured), saved in `eval/splits/django.json`.
    - **Apps:** 39 cases from **pyload** (30) and **Flask-AppBuilder** (9): application code with path traversal, auth bypass, open redirect and command-injection bugs. Never used for tuning.
 2. **Reviewer input:** the enclosing function(s) of the lines the fix changed, at the parent commit, presented as newly added code. The reviewer never sees the advisory, commit message or fix. Its repo tools read the repository at that same commit.
@@ -203,6 +203,16 @@ Reports: `results/*.md`. Per-case JSON (every finding, every judge verdict, late
 - **Tuning on dev didn't transfer.** Two-level caller tracing raised dev recall from 1/20 to 2/20, and on the test set it moved recall from 2/40 to 1/40 (verifier on). That's all within noise, and I didn't re-tune on the test set.
 - **The verifier removes signal and noise about equally;** the single prompt is 2x faster and quieter and catches nothing more.
 
+### Limitations
+
+- **Low recall on real bugs.** A 7B local model misses most subtle vulnerabilities: 4/39 app-level and 1/40 Django CVEs with the default settings.
+- **False alarms.** It flags already-patched code about as often as it catches the bug. On four of my own projects, 6 of 7 security alerts were false alarms (the 7th was a real `shell=True` pattern inside a downloaded third-party dataset, not my code).
+- **One file at a time.** Bugs whose input arrives through several files (most of the Django cases) are out of reach; caller tracing only goes two levels up.
+- **Python only, and slow on a laptop:** about 30 seconds to 2.5 minutes per pull request.
+- **Small sample.** 79 cases means wide confidence intervals (4/39 = 10%, 95% CI 4-24%).
+- **No bigger model tested at scale.** A 14B model doesn't fit an 8 GB GPU (see below).
+- **Grading.** The LLM judge wasn't reliable enough on its own, so results come from a manual audit of every judged finding (`eval/labels/`).
+
 ### 14B trial
 
 `ACR_NUM_CTX=8192`, 1 test case: 656 s and 667 s per review vs 131 s / 112 s for 7B. `ollama ps` showed a 43% CPU / 57% GPU split (the ~10 GB loaded model doesn't fit in 8 GB of VRAM). Free RAM fell to 0.2 GB and the pagefile grew to 5.2 GB, so Windows was swapping. A full run would take ~15 hours, so I stopped after one case (log: `results/trial14b.log`). With 12-16 GB of VRAM it's worth running: `examples/trial_14b.sh` measures speed and memory first.
@@ -236,7 +246,7 @@ python -m eval.plot_results                                     # results/summar
 ## On real GitHub pull requests (verified)
 
 `python examples/build_demo_prs.py` builds a small Flask shop with four PR branches containing planted bugs, plus one clean refactor as a control. It lives at [acr-demo-shop](https://github.com/AbdulMuhaiminKhan/acr-demo-shop) (intentionally vulnerable, don't deploy it). I opened the four PRs there and ran
-`python -m acr.cli --repo <you>/acr-demo-shop --pr <n> --local-repo ../acr-demo-shop --ref <branch> --post` on each (diff fetched from the GitHub API, review posted as a PR comment, 35-133 s per PR):
+`python -m acr.cli --repo <you>/acr-demo-shop --pr <n> --local-repo ../acr-demo-shop --ref <branch> --post` on each (diff fetched from the GitHub API, review posted as a PR comment, about 30-160 s per PR):
 
 | PR | Planted | Review comment |
 |---|---|---|
